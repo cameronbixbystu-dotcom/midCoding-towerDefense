@@ -1,0 +1,749 @@
+# Tower Defense with Pygame: Multi-Day Build Guide
+
+This version is intentionally split into function-sized and class-sized code blocks.
+Students should type each block, test, then continue. Do not hand out one full finished file.
+
+## Teacher Setup
+
+Install pygame once on each machine:
+
+```bash
+pip install pygame
+```
+
+Run code each day with:
+
+```bash
+python3 tower_defense.py
+```
+
+Fallback:
+
+```bash
+python tower_defense.py
+```
+
+## How To Use This Guide In Class
+
+1. Start from yesterday's working file.
+2. Add blocks in order.
+3. Run after each block.
+4. Fix errors before moving on.
+
+Suggested pace for 60 minutes:
+- 10 min mini-lesson
+- 35 min coding blocks
+- 10 min test and debug
+- 5 min recap
+
+## Day 1: Window, Constants, and Grid
+
+Checkpoint goal:
+- Window opens and a board grid is visible.
+
+Block 1: imports and constants
+
+```python
+import sys
+import pygame
+
+pygame.init()
+
+GRID_COLS = 16
+GRID_ROWS = 12
+TILE_SIZE = 56
+BOARD_WIDTH = GRID_COLS * TILE_SIZE
+BOARD_HEIGHT = GRID_ROWS * TILE_SIZE
+PANEL_WIDTH = 280
+WIDTH = BOARD_WIDTH + PANEL_WIDTH
+HEIGHT = BOARD_HEIGHT
+FPS = 60
+
+BG_COLOR = (26, 33, 42)
+GRID_COLOR = (43, 52, 63)
+GRASS_COLOR = (49, 90, 58)
+PANEL_BG = (20, 24, 30)
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Tower Defense - Day 1")
+clock = pygame.time.Clock()
+```
+
+Block 2: draw functions
+
+```python
+def draw_grid():
+	for row in range(GRID_ROWS):
+		for col in range(GRID_COLS):
+			x = col * TILE_SIZE
+			y = row * TILE_SIZE
+			pygame.draw.rect(screen, GRASS_COLOR, (x, y, TILE_SIZE, TILE_SIZE))
+			pygame.draw.rect(screen, GRID_COLOR, (x, y, TILE_SIZE, TILE_SIZE), 1)
+
+
+def draw_panel():
+	pygame.draw.rect(screen, PANEL_BG, (BOARD_WIDTH, 0, PANEL_WIDTH, HEIGHT))
+```
+
+Block 3: main loop
+
+```python
+def main():
+	running = True
+	while running:
+		clock.tick(FPS)
+
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				running = False
+
+		screen.fill(BG_COLOR)
+		draw_grid()
+		draw_panel()
+		pygame.display.flip()
+
+	pygame.quit()
+	sys.exit()
+
+
+if __name__ == "__main__":
+	main()
+```
+
+Test now:
+- Run and verify grid draws.
+
+## Day 2: Path and One Enemy
+
+Checkpoint goal:
+- One enemy moves through a curved path.
+
+Block 1: path data and helper
+
+```python
+import math
+from dataclasses import dataclass
+
+PATH_COLOR = (116, 89, 68)
+ENEMY_COLOR = (223, 104, 90)
+
+PATH_TILES = [
+	(0, 5), (1, 5), (2, 5), (3, 5), (4, 5),
+	(5, 5), (5, 6), (5, 7), (6, 7), (7, 7),
+	(8, 7), (8, 6), (8, 5), (9, 5), (10, 5),
+	(11, 5), (12, 5), (12, 4), (12, 3),
+	(13, 3), (14, 3), (15, 3),
+]
+PATH_SET = set(PATH_TILES)
+
+
+def tile_center(col, row):
+	return (col * TILE_SIZE + TILE_SIZE / 2, row * TILE_SIZE + TILE_SIZE / 2)
+
+
+PATH_POINTS = [tile_center(c, r) for c, r in PATH_TILES]
+```
+
+Block 2: update draw_grid to paint path
+
+```python
+def draw_grid():
+	for row in range(GRID_ROWS):
+		for col in range(GRID_COLS):
+			x = col * TILE_SIZE
+			y = row * TILE_SIZE
+			tile_color = PATH_COLOR if (col, row) in PATH_SET else GRASS_COLOR
+			pygame.draw.rect(screen, tile_color, (x, y, TILE_SIZE, TILE_SIZE))
+			pygame.draw.rect(screen, GRID_COLOR, (x, y, TILE_SIZE, TILE_SIZE), 1)
+```
+
+Block 3: Enemy class
+
+```python
+@dataclass
+class Enemy:
+	x: float
+	y: float
+	speed: float = 90.0
+	path_index: int = 0
+
+	def update(self, dt):
+		if self.path_index >= len(PATH_POINTS) - 1:
+			return
+		tx, ty = PATH_POINTS[self.path_index + 1]
+		dx = tx - self.x
+		dy = ty - self.y
+		dist = math.hypot(dx, dy)
+		if dist < 1e-4:
+			self.path_index += 1
+			return
+
+		step = self.speed * dt
+		if step >= dist:
+			self.x, self.y = tx, ty
+			self.path_index += 1
+		else:
+			self.x += dx / dist * step
+			self.y += dy / dist * step
+
+	def draw(self):
+		pygame.draw.circle(screen, ENEMY_COLOR, (int(self.x), int(self.y)), 14)
+```
+
+Block 4: integrate in main
+
+```python
+enemy = Enemy(*PATH_POINTS[0])
+
+# Inside the loop, before drawing:
+dt = clock.tick(FPS) / 1000.0
+enemy.update(dt)
+
+# After draw_grid():
+enemy.draw()
+```
+
+Test now:
+- Enemy follows path turns.
+
+## Day 3: Wave Controller
+
+Checkpoint goal:
+- Press S to spawn a stream of enemies.
+
+Block 1: WaveController class
+
+```python
+class WaveController:
+	def __init__(self):
+		self.wave_index = 0
+		self.active = False
+		self.spawned = 0
+		self.total = 0
+		self.spawn_timer = 0.0
+
+	def begin_wave(self):
+		if self.active:
+			return False
+		self.active = True
+		self.wave_index += 1
+		self.spawned = 0
+		self.total = 6 + self.wave_index * 2
+		self.spawn_timer = 0.2
+		return True
+
+	def update(self, dt, enemies):
+		if not self.active:
+			return
+		self.spawn_timer -= dt
+		if self.spawn_timer <= 0 and self.spawned < self.total:
+			enemies.append(Enemy(*PATH_POINTS[0]))
+			self.spawned += 1
+			self.spawn_timer = 0.8
+```
+
+Block 2: state variables and key input
+
+```python
+enemies = []
+waves = WaveController()
+
+# In KEYDOWN events:
+if event.key == pygame.K_s:
+	waves.begin_wave()
+```
+
+Block 3: update/draw many enemies
+
+```python
+waves.update(dt, enemies)
+
+for enemy in enemies:
+	enemy.update(dt)
+
+for enemy in enemies:
+	enemy.draw()
+```
+
+Test now:
+- S creates multiple moving enemies.
+
+## Day 4: Tower Placement
+
+Checkpoint goal:
+- Left click places towers on valid tiles.
+
+Block 1: Tower class
+
+```python
+TOWER_COLOR = (90, 176, 240)
+
+
+@dataclass
+class Tower:
+	col: int
+	row: int
+
+	@property
+	def x(self):
+		return self.col * TILE_SIZE + TILE_SIZE / 2
+
+	@property
+	def y(self):
+		return self.row * TILE_SIZE + TILE_SIZE / 2
+
+	def draw(self):
+		cx = int(self.x)
+		cy = int(self.y)
+		pygame.draw.rect(screen, TOWER_COLOR, (cx - 14, cy - 14, 28, 28), border_radius=4)
+```
+
+Block 2: validation helpers
+
+```python
+def tower_at(towers, col, row):
+	for t in towers:
+		if t.col == col and t.row == row:
+			return t
+	return None
+
+
+def can_place_tower(towers, col, row):
+	if col < 0 or col >= GRID_COLS or row < 0 or row >= GRID_ROWS:
+		return False
+	if (col, row) in PATH_SET:
+		return False
+	if tower_at(towers, col, row) is not None:
+		return False
+	return True
+```
+
+Block 3: mouse input
+
+```python
+towers = []
+
+# In event loop:
+if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+	mx, my = event.pos
+	if mx < BOARD_WIDTH:
+		col = mx // TILE_SIZE
+		row = my // TILE_SIZE
+		if can_place_tower(towers, col, row):
+			towers.append(Tower(col, row))
+```
+
+Block 4: draw towers
+
+```python
+for tower in towers:
+	tower.draw()
+```
+
+Test now:
+- Towers place on grass, not on path.
+
+## Day 5: Bullets and Damage
+
+Checkpoint goal:
+- Towers shoot enemies and enemies can be defeated.
+
+Block 1: extend Enemy stats
+
+```python
+# Add fields to Enemy:
+health: float = 40
+max_health: float = 40
+
+# Optional health bar in Enemy.draw():
+bar_w = 28
+pct = max(0.0, self.health / self.max_health)
+pygame.draw.rect(screen, (45, 16, 14), (int(self.x - 14), int(self.y - 22), bar_w, 5))
+pygame.draw.rect(screen, (77, 201, 112), (int(self.x - 14), int(self.y - 22), int(bar_w * pct), 5))
+```
+
+Block 2: upgrade Tower behavior
+
+```python
+# Add fields to Tower:
+cooldown: float = 0.0
+
+
+def tower_range(tower):
+	return 120
+
+
+def tower_damage(tower):
+	return 18
+
+
+def tower_fire_rate(tower):
+	return 1.0
+```
+
+Block 3: Bullet class
+
+```python
+BULLET_COLOR = (252, 210, 78)
+
+
+@dataclass
+class Bullet:
+	x: float
+	y: float
+	target: Enemy
+	damage: float
+	speed: float = 420.0
+
+	def update(self, dt):
+		if self.target.health <= 0:
+			return True
+		dx = self.target.x - self.x
+		dy = self.target.y - self.y
+		dist = math.hypot(dx, dy)
+		if dist < 8:
+			self.target.health -= self.damage
+			return True
+		step = self.speed * dt
+		self.x += dx / dist * min(step, dist)
+		self.y += dy / dist * min(step, dist)
+		return False
+
+	def draw(self):
+		pygame.draw.circle(screen, BULLET_COLOR, (int(self.x), int(self.y)), 4)
+```
+
+Block 4: fire logic helper
+
+```python
+def update_towers(towers, enemies, bullets, dt):
+	for tower in towers:
+		tower.cooldown -= dt
+		if tower.cooldown > 0:
+			continue
+
+		target = None
+		for enemy in enemies:
+			d = math.hypot(enemy.x - tower.x, enemy.y - tower.y)
+			if enemy.health > 0 and d <= tower_range(tower):
+				target = enemy
+				break
+
+		if target is not None:
+			bullets.append(Bullet(tower.x, tower.y, target, tower_damage(tower)))
+			tower.cooldown = 1.0 / tower_fire_rate(tower)
+```
+
+Block 5: integrate bullets and death cleanup
+
+```python
+bullets = []
+
+update_towers(towers, enemies, bullets, dt)
+
+for b in list(bullets):
+	if b.update(dt):
+		bullets.remove(b)
+
+for b in bullets:
+	b.draw()
+
+for enemy in list(enemies):
+	if enemy.health <= 0:
+		enemies.remove(enemy)
+```
+
+Test now:
+- Towers fire and enemies disappear when defeated.
+
+## Day 6: Gold, Lives, HUD
+
+Checkpoint goal:
+- Building costs gold, kills reward gold, leaks cost lives.
+
+Block 1: resources and text
+
+```python
+font = pygame.font.SysFont("menlo", 20)
+
+gold = 220
+lives = 20
+tower_cost = 70
+message = "Press S to start wave."
+```
+
+Block 2: charge gold for placement
+
+```python
+# In mouse place logic:
+if can_place_tower(towers, col, row) and gold >= tower_cost:
+	towers.append(Tower(col, row))
+	gold -= tower_cost
+elif gold < tower_cost:
+	message = "Not enough gold."
+```
+
+Block 3: lives and rewards in enemy updates
+
+```python
+for enemy in list(enemies):
+	enemy.update(dt)
+	if enemy.path_index >= len(PATH_POINTS) - 1:
+		enemies.remove(enemy)
+		lives -= 1
+		message = "Enemy leaked through!"
+	elif enemy.health <= 0:
+		enemies.remove(enemy)
+		gold += 12
+```
+
+Block 4: HUD function
+
+```python
+def draw_hud(gold, lives, wave_num, message):
+	lines = [
+		f"Gold: {gold}",
+		f"Lives: {lives}",
+		f"Wave: {wave_num}",
+		message,
+	]
+	y = 20
+	for line in lines:
+		surf = font.render(line, True, (230, 234, 240))
+		screen.blit(surf, (BOARD_WIDTH + 16, y))
+		y += 28
+```
+
+Block 5: call HUD
+
+```python
+draw_hud(gold, lives, waves.wave_index, message)
+```
+
+Test now:
+- Gold and lives change while playing.
+
+## Day 7: Wave Scaling
+
+Checkpoint goal:
+- Later waves are clearly harder.
+
+Block 1: scale values in begin_wave
+
+```python
+# In WaveController.begin_wave()
+self.total = 6 + self.wave_index * 3
+self.enemy_health = 30 + self.wave_index * 8
+self.enemy_speed = 80 + self.wave_index * 4
+```
+
+Block 2: spawn scaled enemies
+
+```python
+# In WaveController.update() spawn line:
+enemies.append(
+	Enemy(*PATH_POINTS[0], speed=self.enemy_speed, health=self.enemy_health, max_health=self.enemy_health)
+)
+```
+
+Block 3: optional auto waves toggle
+
+```python
+# In WaveController.__init__:
+self.auto_mode = False
+
+# In keydown:
+if event.key == pygame.K_a:
+	waves.auto_mode = not waves.auto_mode
+
+# In main loop:
+if waves.auto_mode and not waves.active and len(enemies) == 0:
+	waves.begin_wave()
+```
+
+Test now:
+- Wave 3 feels stronger than wave 1.
+
+## Day 8: Selection and Upgrade
+
+Checkpoint goal:
+- Select tower and press U to upgrade it.
+
+Block 1: Tower level fields
+
+```python
+# Add to Tower:
+level: int = 1
+
+
+def tower_range(tower):
+	return 120 + (tower.level - 1) * 28
+
+
+def tower_damage(tower):
+	return 18 + (tower.level - 1) * 12
+
+
+def tower_fire_rate(tower):
+	return 1.0 + (tower.level - 1) * 0.35
+```
+
+Block 2: selected tower state
+
+```python
+selected_tower = None
+upgrade_cost = 90
+```
+
+Block 3: click to select existing tower
+
+```python
+clicked = tower_at(towers, col, row)
+if clicked is not None:
+	selected_tower = clicked
+else:
+	# place tower logic from previous day
+	pass
+```
+
+Block 4: upgrade key
+
+```python
+if event.key == pygame.K_u and selected_tower is not None:
+	if gold >= upgrade_cost and selected_tower.level < 4:
+		selected_tower.level += 1
+		gold -= upgrade_cost
+		message = f"Tower upgraded to L{selected_tower.level}."
+```
+
+Block 5: draw selected indicator
+
+```python
+for tower in towers:
+	tower.draw()
+	if tower is selected_tower:
+		pygame.draw.circle(screen, (255, 215, 117), (int(tower.x), int(tower.y)), int(tower_range(tower)), 2)
+```
+
+Test now:
+- Selected tower improves after pressing U.
+
+## Day 9: Win/Lose and Restart
+
+Checkpoint goal:
+- Complete game loop with end states and reset.
+
+Block 1: state values
+
+```python
+game_state = "playing"
+total_waves = 12
+```
+
+Block 2: set lose condition
+
+```python
+if lives <= 0:
+	game_state = "lose"
+	message = "Defeat. Press R to restart."
+```
+
+Block 3: set win condition
+
+```python
+if waves.wave_index >= total_waves and not waves.active and len(enemies) == 0:
+	game_state = "win"
+	message = "Victory. Press R to restart."
+```
+
+Block 4: overlay function
+
+```python
+def draw_overlay(game_state):
+	if game_state == "playing":
+		return
+	overlay = pygame.Surface((BOARD_WIDTH, BOARD_HEIGHT), pygame.SRCALPHA)
+	overlay.fill((7, 10, 14, 170))
+	screen.blit(overlay, (0, 0))
+
+	title = "Victory" if game_state == "win" else "Defeat"
+	t = font.render(title, True, (230, 234, 240))
+	p = font.render("Press R to play again", True, (230, 234, 240))
+	screen.blit(t, (BOARD_WIDTH // 2 - 40, BOARD_HEIGHT // 2 - 30))
+	screen.blit(p, (BOARD_WIDTH // 2 - 120, BOARD_HEIGHT // 2 + 5))
+```
+
+Block 5: reset helper
+
+```python
+def reset_game_state():
+	return {
+		"gold": 220,
+		"lives": 20,
+		"message": "Press S to start wave.",
+		"game_state": "playing",
+		"towers": [],
+		"selected_tower": None,
+		"enemies": [],
+		"bullets": [],
+		"waves": WaveController(),
+	}
+```
+
+Block 6: restart input
+
+```python
+if event.key == pygame.K_r:
+	state = reset_game_state()
+	gold = state["gold"]
+	lives = state["lives"]
+	message = state["message"]
+	game_state = state["game_state"]
+	towers = state["towers"]
+	selected_tower = state["selected_tower"]
+	enemies = state["enemies"]
+	bullets = state["bullets"]
+	waves = state["waves"]
+```
+
+Test now:
+- Win/lose screens appear and R fully restarts.
+
+## Day 10: Polish Day (No Full Solution Drop)
+
+Checkpoint goal:
+- Each student adds one feature and demos it.
+
+Choose one feature block to implement:
+- Add a new tower type function.
+- Add a fast enemy subclass.
+- Add sound effects function.
+- Add pause toggle function.
+- Add score tracking function.
+
+Teacher rule:
+- Students must explain where their function is called and why.
+
+## Debug Checklist
+
+If game crashes:
+- Fix the first error shown in terminal.
+- Verify every function call has matching parameters.
+
+If nothing draws:
+- Confirm screen.fill, draw calls, and pygame.display.flip all run each frame.
+
+If towers do not shoot:
+- Verify update_towers is called every loop.
+- Verify cooldown goes down with dt.
+
+If restart breaks:
+- Verify every game list and counter is reset.
+
+## Daily Exit Ticket Prompt
+
+Use this every day:
+1. What function or class did you add today?
+2. What test proved it worked?
+3. What bug did you fix?
+
