@@ -62,38 +62,32 @@ def draw_grid():
 def draw_panel():
 	pygame.draw.rect(screen, PANEL_BG, (BOARD_WIDTH, 0, PANEL_WIDTH, HEIGHT))
 	
+class WaveController:
+	def __init__(self):
+		self.wave_index = 0
+		self.active = False
+		self.spawned = 0
+		self.total = 0
+		self.spawn_timer = 0.0
 
+	def begin_wave(self):
+		if self.active:
+			return False
+		self.active = True
+		self.wave_index += 1
+		self.spawned = 0
+		self.total = 6 + self.wave_index * 2
+		self.spawn_timer = 0.2
+		return True
 
-
-def main():
-	running = True
-	enemy = Enemy(*PATH_POINTS[0])
-	while running:
-		clock.tick(FPS)
-        dt = clock.tick(FPS) / 1000.0
-        enemy.update(dt)
-	
-
-		for event in pygame.event.get():
-			if event.type == pygame.QUIT:
-				running = False
-
-		screen.fill(BG_COLOR)
-		draw_grid()
-	    enemy.draw()
-		draw_panel()
-		pygame.display.flip()
-
-	pygame.quit()
-	sys.exit()
-
-
-if __name__ == "__main__":
-	main()
-
-
-
-
+	def update(self, dt, enemies):
+		if not self.active:
+			return
+		self.spawn_timer -= dt
+		if self.spawn_timer <= 0 and self.spawned < self.total:
+			enemies.append(Enemy(*PATH_POINTS[0]))
+			self.spawned += 1
+			self.spawn_timer = 0.8
 
 @dataclass
 class Enemy:
@@ -120,6 +114,58 @@ class Enemy:
 		else:
 			self.x += dx / dist * step
 			self.y += dy / dist * step
+
+	def draw(self):
+		pygame.draw.circle(screen, ENEMY_COLOR, (int(self.x), int(self.y)), 14)
+
+enemies = []
+waves = WaveController()
+
+# In KEYDOWN events:
+if event.key == pygame.K_s:
+	waves.begin_wave()
+
+
+waves.update(dt, enemies)
+
+for enemy in enemies:
+	enemy.update(dt)
+
+for enemy in enemies:
+	enemy.draw()
+
+
+
+def main():
+	running = True
+	enemy = Enemy(*PATH_POINTS[0])
+	while running:
+		clock.tick(FPS)
+
+		dt = clock.tick(FPS) / 1000.0
+		enemy.update(dt)
+		screen.fill(BG_COLOR)
+		draw_grid()
+		enemy.draw()
+		draw_panel()
+		pygame.display.flip()
+	
+		for event in pygame.event.get():
+			
+			if event.type == pygame.QUIT:
+				running = False
+
+
+
+	pygame.quit()
+	sys.exit()
+
+
+if __name__ == "__main__":
+	main()
+
+
+
 
 	def draw(self):
 		pygame.draw.circle(screen, ENEMY_COLOR, (int(self.x), int(self.y)), 14)
