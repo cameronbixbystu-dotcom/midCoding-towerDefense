@@ -18,6 +18,8 @@ BG_COLOR = (26, 33, 42)
 GRID_COLOR = (43, 52, 63)
 GRASS_COLOR = (49, 90, 58)
 PANEL_BG = (20, 24, 30)
+BULLET_COLOR = (252, 210, 78)
+BULLET_COLOR = (252, 210, 78)
 
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Tower Defense - Day 1")
@@ -129,18 +131,6 @@ class WaveController:
 			enemies.append(Enemy(*PATH_POINTS[0]))
 			self.spawned += 1
 			self.spawn_timer = 0.8
-			waves.update(dt, enemies)
-
-			for enemy in enemies:
-				enemy.update(dt)
-
-			for enemy in enemies:
-				enemy.draw()
-
-BULLET_COLOR = (252, 210, 78)
-
-
-
 
 @dataclass
 class Enemy:
@@ -164,10 +154,6 @@ class Enemy:
 		if dist < 1e-4:
 			self.path_index += 1
 			return
-
-
-		
-
 		step = self.speed * dt
 		if step >= dist:
 			self.x, self.y = tx, ty
@@ -179,18 +165,16 @@ class Enemy:
 
 
 
-		# Optional health bar in Enemy.draw():
-		bar_w = 28
-		pct = max(0.0, self.health / self.max_health)
-		pygame.draw.rect(screen, (45, 16, 14), (int(self.x - 14), int(self.y - 22), bar_w, 5))
-		pygame.draw.rect(screen, (77, 201, 112), (int(self.x - 14), int(self.y - 22), int(bar_w * pct), 5))
+
 
 		def draw(self):
 			pygame.draw.circle(screen, ENEMY_COLOR, (int(self.x), int(self.y)), 14)
+			bar_w = 28
+			pct = max(0.0, self.health / self.max_health)
+			pygame.draw.rect(screen, (45, 16, 14), (int(self.x - 14), int(self.y - 22), bar_w, 5))
+			pygame.draw.rect(screen, (77, 201, 112), (int(self.x - 14), int(self.y - 22), int(bar_w * pct), 5))
 
 
-
-BULLET_COLOR = (252, 210, 78)
 
 
 @dataclass
@@ -226,36 +210,54 @@ for tower in towers:
 	cooldown: float = 0.0
 
 
-	def tower_range(tower):
-		return 120
+def tower_range(tower):
+	return 120
 
 
-	def tower_damage(tower):
-		return 18
+def tower_damage(tower):
+	return 18
 
 
-	def tower_fire_rate(tower):
-		return 1.0
+def tower_fire_rate(tower):
+	return 1.0
 
 def main():
 	running = True
 	enemy = Enemy(*PATH_POINTS[0])
+	enemies = []
+	waves = WaveController()
 	# Add fields to Tower:
 	while running:
 		clock.tick(FPS)
 
 		dt = clock.tick(FPS) / 1000.0
-		enemy.update(dt)
+		for enemy in list(enemies):
+			enemy.update(dt)
+			if enemy.path_index >= len(PATH_POINTS) - 1:
+				enemies.remove(enemy)
+				lives -= 1
+				message = "Enemy leaked through!"
+			elif enemy.health <= 0:
+				enemies.remove(enemy)
+				gold += 12
 		screen.fill(BG_COLOR)
 		draw_grid()
-		enemy.draw()
+		for enemy in enemies:
+			enemy.draw()
 		draw_panel()
 		pygame.display.flip()
-	
+		draw_hud(gold, lives, waves.wave_index, message)
+
 		for event in pygame.event.get():
 							# In event loop:
 			if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
 				mx, my = event.pos
+				# In mouse place logic:
+				if can_place_tower(towers, col, row) and gold >= tower_cost:
+					towers.append(Tower(col, row))
+					gold -= tower_cost
+				elif gold < tower_cost:
+					message = "Not enough gold."
 			if mx < BOARD_WIDTH:
 				col = mx // TILE_SIZE
 				row = my // TILE_SIZE
@@ -268,6 +270,21 @@ def main():
 
 	pygame.quit()
 	sys.exit()
+
+def draw_hud(gold, lives, wave_num, message):
+	lines = [
+		f"Gold: {gold}",
+		f"Lives: {lives}",
+		f"Wave: {wave_num}",
+		message,
+	]
+	y = 20
+	for line in lines:
+		surf = font.render(line, True, (230, 234, 240))
+		screen.blit(surf, (BOARD_WIDTH + 16, y))
+		y += 28
+
+
 
 
 font = pygame.font.SysFont("menlo", 20)
@@ -318,7 +335,6 @@ def update_towers(towers, enemies, bullets, dt):
 
 	def draw(self):
 		pygame.draw.circle(screen, ENEMY_COLOR, (int(self.x), int(self.y)), 14)
-
 
 
 if __name__ == "__main__":
