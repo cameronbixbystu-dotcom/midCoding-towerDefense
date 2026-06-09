@@ -249,7 +249,8 @@ def main():
 	lives = 20
 	tower_cost = 70
 	message = "Press S to start wave."
-	clicked = tower_at(towers, col, row)
+	
+
 	while running:
 		dt = clock.tick(FPS) / 1000.0
 
@@ -263,6 +264,7 @@ def main():
 					waves.begin_wave()
 				if event.key == pygame.K_a:
 					waves.auto_mode = not waves.auto_mode
+				
 			elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
 				mx, my = event.pos
 				if mx < BOARD_WIDTH:
@@ -274,23 +276,28 @@ def main():
 						gold -= tower_cost
 					elif gold < tower_cost:
 						message = "Not enough gold."
-				
-				if clicked is not None:
-					selected_tower = clicked
-				else:
-					if can_place_tower(towers, col, row) and gold >= tower_cost:
-						towers.append(Tower(col, row))
-						gold -= tower_cost
-					elif gold < tower_cost:
-						message = "Not enough gold."
 
-
-				if event.key == pygame.K_u and selected_tower is not None:
+			if event.key == pygame.K_u and selected_tower is not None:
 					if gold >= upgrade_cost and selected_tower.level < 4:
 						selected_tower.level += 1
 						gold -= upgrade_cost
 						message = f"Tower upgraded to L{selected_tower.level}."
 
+
+		clicked = tower_at(towers, col, row)
+		if clicked is not None:
+			selected_tower = clicked
+		else:
+			if can_place_tower(towers, col, row) and gold >= tower_cost:
+				towers.append(Tower(col, row))
+				gold -= tower_cost
+			elif gold < tower_cost:
+				message = "Not enough gold."
+
+
+			
+
+		
 		screen.fill(BG_COLOR)
 		waves.update(dt, enemies)
 		for enemy in enemies:
