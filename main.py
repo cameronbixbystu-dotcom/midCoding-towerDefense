@@ -203,6 +203,18 @@ def tower_at(towers, col, row):
 			return t
 	return None
 
+def reset_game_state():
+	return {
+	"gold": 220,
+	"lives": 20,
+	"message": "Press S to start wave.",
+	"game_state": "playing",
+	"towers": [],
+	"selected_tower": None,
+	"enemies": [],
+	"bullets": [],
+	"waves": WaveController(),
+}
 
 def can_place_tower(towers, col, row):
 	if col < 0 or col >= GRID_COLS or row < 0 or row >= GRID_ROWS:
@@ -248,8 +260,12 @@ def main():
 	gold = 220
 	lives = 20
 	tower_cost = 70
+	upgrade_cost = 90
 	message = "Press S to start wave."
-	
+	clicked = tower_at(towers, col, row)
+	game_state = "playing"
+	total_waves = 12
+
 
 	while running:
 		dt = clock.tick(FPS) / 1000.0
@@ -257,13 +273,26 @@ def main():
 		for event in pygame.event.get():
 			if event.type == pygame.QUIT:
 				running = False
-			if waves.auto_mode and not waves.active and len(enemies) == 0:
+		if clicked is not None:
+			selected_tower = clicked
+		else:
+			if can_place_tower(towers, col, row) and gold >= tower_cost:
+				towers.append(Tower(col, row))
+				gold -= tower_cost
+			elif gold < tower_cost:
+				message = "Not enough gold."
+			elif waves.auto_mode and not waves.active and len(enemies) == 0:
 				waves.begin_wave()
 			elif event.type == pygame.KEYDOWN:
 				if event.key == pygame.K_s:
 					waves.begin_wave()
-				if event.key == pygame.K_a:
+				elif event.key == pygame.K_a:
 					waves.auto_mode = not waves.auto_mode
+				elif event.key == pygame.K_u and selected_tower is not None:
+					if gold >= upgrade_cost and selected_tower.level < 4:
+						selected_tower.level += 1
+						gold -= upgrade_cost
+						message = f"Tower upgraded to L{selected_tower.level}."
 				
 			elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
 				mx, my = event.pos
@@ -276,28 +305,36 @@ def main():
 						gold -= tower_cost
 					elif gold < tower_cost:
 						message = "Not enough gold."
-
-			if event.key == pygame.K_u and selected_tower is not None:
-					if gold >= upgrade_cost and selected_tower.level < 4:
-						selected_tower.level += 1
-						gold -= upgrade_cost
-						message = f"Tower upgraded to L{selected_tower.level}."
-
-
-		clicked = tower_at(towers, col, row)
-		if clicked is not None:
-			selected_tower = clicked
-		else:
-			if can_place_tower(towers, col, row) and gold >= tower_cost:
-				towers.append(Tower(col, row))
-				gold -= tower_cost
-			elif gold < tower_cost:
-				message = "Not enough gold."
-
+					if event.key == pygame.K_r:
+						state = reset_game_state()
+						gold = state["gold"]
+						lives = state["lives"]
+						message = state["message"]
+						game_state = state["game_state"]
+						towers = state["towers"]
+						selected_tower = state["selected_tower"]
+						enemies = state["enemies"]
+						bullets = state["bullets"]
+						waves = state["waves"]
 
 			
 
+
 		
+
+
+
+			
+		if lives <= 0:
+			game_state = "lose"
+			message = "Defeat. Press R to restart."
+		
+
+		if waves.wave_index >= total_waves and not waves.active and len(enemies) == 0:
+			game_state = "win"
+			message = "Victory. Press R to restart."
+
+
 		screen.fill(BG_COLOR)
 		waves.update(dt, enemies)
 		for enemy in enemies:
@@ -327,6 +364,21 @@ def main():
 		draw_panel()
 		draw_hud(gold, lives, waves.wave_index, message)
 		pygame.display.flip()
+		def draw_overlay(game_state):
+			if game_state == "playing":
+				return
+			overlay = pygame.Surface((BOARD_WIDTH, BOARD_HEIGHT), pygame.SRCALPHA)
+			overlay.fill((7, 10, 14, 170))
+			screen.blit(overlay, (0, 0))
+
+
+
+
+		title = "Victory" if game_state == "win" else "Defeat"
+		t = font.render(title, True, (230, 234, 240))
+		p = font.render("Press R to play again", True, (230, 234, 240))
+		screen.blit(t, (BOARD_WIDTH // 2 - 40, BOARD_HEIGHT // 2 - 30))
+		screen.blit(p, (BOARD_WIDTH // 2 - 120, BOARD_HEIGHT // 2 + 5))
 
 	pygame.quit()
 	sys.exit()
