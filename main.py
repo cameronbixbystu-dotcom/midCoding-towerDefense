@@ -31,6 +31,8 @@ GRID_COLOR = (43, 52, 63)
 GRASS_COLOR = (49, 90, 58)
 PANEL_BG = (20, 24, 30)
 
+print("Hi")
+
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Tower Defense - Day 1")
 clock = pygame.time.Clock()
@@ -141,6 +143,11 @@ class WaveController:
 		)
 			self.spawned += 1
 			self.spawn_timer = 0.8
+#HI THERE
+
+
+
+
 
 
 @dataclass
